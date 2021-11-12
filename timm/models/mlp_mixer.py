@@ -50,6 +50,9 @@ from .helpers import build_model_with_cfg, overlay_external_default_cfg, named_a
 from .layers import PatchEmbed, Mlp, GluMlp, GatedMlp, DropPath, lecun_normal_, to_2tuple
 from .registry import register_model
 
+# mod by Zhifan Ye
+from sparsity_util import write_sparsity_info
+stats_gen = True
 
 def _cfg(url='', **kwargs):
     return {
