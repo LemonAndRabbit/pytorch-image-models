@@ -32,6 +32,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from sparsity_util import write_sparsity_info
+
+# mod by Zhifan Ye, set True to generate the output
+stats_gen = True
+
 from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_INCEPTION_MEAN, IMAGENET_INCEPTION_STD
 from .helpers import build_model_with_cfg, named_apply, adapt_input_conv
 from .layers import PatchEmbed, Mlp, DropPath, trunc_normal_, lecun_normal_
@@ -176,7 +181,8 @@ default_cfgs = {
 
 
 class Attention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0.):
+    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0.
+            ,prefix=''):
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
@@ -187,13 +193,38 @@ class Attention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
+        #mod by Zhifan Ye
+        self.prefix = prefix
+
     def forward(self, x):
+
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_input0", dims=['patch', 'embdding'])
+
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv.unbind(0)   # make torchscript happy (cannot use tensor as tuple)
+        
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(q, self.prefix+"_q", dims=['heads', 'patch', 'embdding'])
+            write_sparsity_info(k, self.prefix+"_k", dims=['heads', 'patch', 'embdding'])
+            write_sparsity_info(v, self.prefix+"_v", dims=['heads', 'patch', 'embdding'])
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
+
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(attn, self.prefix+"_qk", dims=['heads', 'patch1', 'patch2'])
+
         attn = attn.softmax(dim=-1)
+
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(attn, self.prefix+"_sft_qk", dims=['heads', 'patch1', 'patch2'])
+
+
         attn = self.attn_drop(attn)
 
         x = (attn @ v).transpose(1, 2).reshape(B, N, C)
@@ -205,10 +236,15 @@ class Attention(nn.Module):
 class Block(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
+                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm,
+                 prefix=''):
         super().__init__()
+
+        # mod by Zhifan Ye
+        self.prefix = prefix
+
         self.norm1 = norm_layer(dim)
-        self.attn = Attention(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+        self.attn = Attention(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop, prefix=prefix+'_attn')
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
@@ -275,7 +311,8 @@ class VisionTransformer(nn.Module):
         self.blocks = nn.Sequential(*[
             Block(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, drop=drop_rate,
-                attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer, act_layer=act_layer)
+                attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer, act_layer=act_layer,
+                prefix = 'block' + str(i))
             for i in range(depth)])
         self.norm = norm_layer(embed_dim)
 

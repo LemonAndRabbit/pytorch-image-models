@@ -9,6 +9,9 @@ Copyright 2020 Ross Wightman
 import math
 from functools import partial
 
+# mod by Zhifan Ye
+from sparsity_util import write_sparsity_info
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -20,6 +23,8 @@ from .registry import register_model
 
 __all__ = ['ResNet', 'BasicBlock', 'Bottleneck']  # model_registry will add each entrypoint fn to this
 
+# mod by Zhifan Ye, set True to generate the output
+stats_gen = True
 
 def _cfg(url='', **kwargs):
     return {
@@ -288,7 +293,7 @@ class BasicBlock(nn.Module):
 
     def __init__(self, inplanes, planes, stride=1, downsample=None, cardinality=1, base_width=64,
                  reduce_first=1, dilation=1, first_dilation=None, act_layer=nn.ReLU, norm_layer=nn.BatchNorm2d,
-                 attn_layer=None, aa_layer=None, drop_block=None, drop_path=None):
+                 attn_layer=None, aa_layer=None, drop_block=None, drop_path=None, prefix = ''):
         super(BasicBlock, self).__init__()
 
         assert cardinality == 1, 'BasicBlock only supports cardinality of 1'
@@ -317,6 +322,7 @@ class BasicBlock(nn.Module):
         self.dilation = dilation
         self.drop_block = drop_block
         self.drop_path = drop_path
+        self.prefix = prefix
 
     def zero_init_last_bn(self):
         nn.init.zeros_(self.bn2.weight)
@@ -324,29 +330,61 @@ class BasicBlock(nn.Module):
     def forward(self, x):
         shortcut = x
 
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_input0")
+            
         x = self.conv1(x)
         x = self.bn1(x)
+
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_conv1")
+
         if self.drop_block is not None:
             x = self.drop_block(x)
         x = self.act1(x)
+
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_act2")
+
         if self.aa is not None:
             x = self.aa(x)
+            # mod by Zhifan Ye
+            if stats_gen:
+                write_sparsity_info(x, self.prefix+"_aa3")
 
         x = self.conv2(x)
         x = self.bn2(x)
+
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_conv4")
+
         if self.drop_block is not None:
             x = self.drop_block(x)
 
         if self.se is not None:
             x = self.se(x)
+            # mod by Zhifan Ye
+            if stats_gen:
+                write_sparsity_info(x, self.prefix+"_se6")
 
         if self.drop_path is not None:
             x = self.drop_path(x)
 
         if self.downsample is not None:
             shortcut = self.downsample(shortcut)
+            # mod by Zhifan Ye
+            if stats_gen:
+                write_sparsity_info(x, self.prefix+"_ds8")
+
         x += shortcut
         x = self.act2(x)
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_act9")
 
         return x
 
@@ -356,7 +394,7 @@ class Bottleneck(nn.Module):
 
     def __init__(self, inplanes, planes, stride=1, downsample=None, cardinality=1, base_width=64,
                  reduce_first=1, dilation=1, first_dilation=None, act_layer=nn.ReLU, norm_layer=nn.BatchNorm2d,
-                 attn_layer=None, aa_layer=None, drop_block=None, drop_path=None):
+                 attn_layer=None, aa_layer=None, drop_block=None, drop_path=None, prefix = ''):
         super(Bottleneck, self).__init__()
 
         width = int(math.floor(planes * (base_width / 64)) * cardinality)
@@ -387,6 +425,7 @@ class Bottleneck(nn.Module):
         self.dilation = dilation
         self.drop_block = drop_block
         self.drop_path = drop_path
+        self.prefix = prefix
 
     def zero_init_last_bn(self):
         nn.init.zeros_(self.bn3.weight)
@@ -498,6 +537,7 @@ def make_blocks(
             block_dpr = drop_path_rate * net_block_idx / (net_num_blocks - 1)  # stochastic depth linear decay rule
             blocks.append(block_fn(
                 inplanes, planes, stride, downsample, first_dilation=prev_dilation,
+                prefix = stage_name + '_b' + str(block_idx),
                 drop_path=DropPath(block_dpr) if block_dpr > 0. else None, **block_kwargs))
             prev_dilation = dilation
             inplanes = planes * block_fn.expansion

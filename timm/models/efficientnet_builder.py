@@ -321,6 +321,7 @@ class EfficientNetBuilder:
                     ba['se_layer'] = self.se_layer
 
         if bt == 'ir':
+            ba['prefix'] = 'block' + str(block_idx)
             _log_info_if('  InvertedResidual {}, Args: {}'.format(block_idx, str(ba)), self.verbose)
             block = CondConvResidual(**ba) if ba.get('num_experts', 0) else InvertedResidual(**ba)
         elif bt == 'ds' or bt == 'dsa':

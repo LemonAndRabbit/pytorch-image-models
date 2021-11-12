@@ -3,12 +3,19 @@
 Hacked together by / Copyright 2020 Ross Wightman
 """
 
+from os import write
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+# mod by Zhifan Ye 
+from sparsity_util import write_sparsity_info
+
 from .layers import create_conv2d, drop_path, make_divisible, create_act_layer
 from .layers.activations import sigmoid
+
+# mod by Zhifan Ye, set True to generate the output
+stats_gen = True
 
 __all__ = [
     'SqueezeExcite', 'ConvBnAct', 'DepthwiseSeparableConv', 'InvertedResidual', 'CondConvResidual', 'EdgeResidual']
@@ -145,7 +152,8 @@ class InvertedResidual(nn.Module):
     def __init__(
             self, in_chs, out_chs, dw_kernel_size=3, stride=1, dilation=1, pad_type='',
             noskip=False, exp_ratio=1.0, exp_kernel_size=1, pw_kernel_size=1, act_layer=nn.ReLU,
-            norm_layer=nn.BatchNorm2d, se_layer=None, conv_kwargs=None, drop_path_rate=0.):
+            norm_layer=nn.BatchNorm2d, se_layer=None, conv_kwargs=None, drop_path_rate=0.,
+            prefix = ''):
         super(InvertedResidual, self).__init__()
         conv_kwargs = conv_kwargs or {}
         mid_chs = make_divisible(in_chs * exp_ratio)
@@ -171,6 +179,9 @@ class InvertedResidual(nn.Module):
         self.conv_pwl = create_conv2d(mid_chs, out_chs, pw_kernel_size, padding=pad_type, **conv_kwargs)
         self.bn3 = norm_layer(out_chs)
 
+        # mod by Zhifan Ye
+        self.prefix = prefix
+
     def feature_info(self, location):
         if location == 'expansion':  # after SE, input to PWL
             info = dict(module='conv_pwl', hook_type='forward_pre', num_chs=self.conv_pwl.in_channels)
@@ -181,27 +192,51 @@ class InvertedResidual(nn.Module):
     def forward(self, x):
         shortcut = x
 
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_input0.spi")
+
         # Point-wise expansion
         x = self.conv_pw(x)
         x = self.bn1(x)
         x = self.act1(x)
+
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_pw_output1.psi")
 
         # Depth-wise convolution
         x = self.conv_dw(x)
         x = self.bn2(x)
         x = self.act2(x)
 
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_dw_output1.psi")
+
         # Squeeze-and-excitation
         x = self.se(x)
+
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_se_output2.psi")
 
         # Point-wise linear projection
         x = self.conv_pwl(x)
         x = self.bn3(x)
 
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_lp_output3.psi")
+
         if self.has_residual:
             if self.drop_path_rate > 0.:
                 x = drop_path(x, self.drop_path_rate, self.training)
             x += shortcut
+        
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_residual_concat_output4.psi")
 
         return x
 
