@@ -5,11 +5,11 @@
 
 in folder [sparsity_util](sparsity_util/)
 
-1. [draw.py](sparsity_uti/draw.py) for drawing 2D & 3D Sparsity Map
+1. [draw.py](sparsity_util/draw.py) for drawing 2D & 3D Sparsity Map
 
-2. [gen_sparsit_info.py](sparsity_uti/gen_sparsit_info.py) to store and load sparsity
+2. [gen_sparsit_info.py](sparsity_util/gen_sparsit_info.py) to store and load sparsity
 
-3. [sparsity_info.py](sparsity_uti/sparsity_info.py) defines a class to operate on sparsity info
+3. [sparsity_info.py](sparsity_util/sparsity_info.py) defines a class to operate on sparsity info
 
 ## Testcase
 
