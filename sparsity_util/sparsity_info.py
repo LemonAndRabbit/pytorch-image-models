@@ -7,23 +7,23 @@ import numpy as np
 class SparsityInfo:
     '''store sparsity info in each sample round as a list'''
 
-    def __init__(self, sparsirty_info_list: list, dims: list, tile_size=[]):
-        self.batch_count = len(sparsirty_info_list)
-        self.sparsity_info_list = deepcopy(sparsirty_info_list)
-        self.shape = self.sparsirty_info_list[0].shape
+    def __init__(self, sparsity_info_list: list, dims: list, tile_size=[]):
+        self.batch_count = len(sparsity_info_list)
+        self.sparsity_info_list = deepcopy(sparsity_info_list)
+        self.shape = self.sparsity_info_list[0].shape
         self.dims = dims
         self.tile_size = tile_size
     
     @cached_property
     def tiled(self):
-        return len(self.tile_size) == 0
+        return len(self.tile_size) != 0
 
     @cached_property
     def avg(self):
         '''avgerage over batches'''
 
         temp = np.zeros(self.shape, dtype=float)  
-        if self.tiled:
+        if not self.tiled:
             for tensor in self.sparsity_info_list:
                 temp = temp + tensor.astype(int)
         else:
@@ -37,7 +37,7 @@ class SparsityInfo:
         '''standard variation over batches'''
 
         temp = np.zeros(self.shape, dtype=float)
-        if self.tiled:
+        if not self.tiled:
             for tensor in self.sparsity_info_list:
                 temp = temp + np.square(tensor.astype(int) - self.avg)
         else:
@@ -50,7 +50,7 @@ class SparsityInfo:
     def tile(self, tile_size: list):
         '''create tiled sparsity info'''
 
-        assert self.tiled, "already tiled, retiling not allowed"
+        assert not self.tiled, "already tiled, retiling not allowed"
         
         assert len(tile_size) == len(self.shape), \
             "tile_size dim=%d not equal to tensor dim=%d" \
@@ -59,10 +59,13 @@ class SparsityInfo:
         output_tensor_list = []
         if len(tile_size) == 2:
             for tensor in self.sparsity_info_list:
-                output_tensor_list.append(tile_2D(tensor))
+                output_tensor_list.append(tile_2D(tensor, tile_size))
         if len(tile_size) == 3:
             for tensor in self.sparsity_info_list:
-                output_tensor_list.append(tile_3D(tensor))
+                output_tensor_list.append(tile_3D(tensor, tile_size))
 
         return SparsityInfo(output_tensor_list, self.dims, tile_size)           
 
+    def slice_batch(self, batch_i, batch_j):
+        '''create a slice in batch dimension'''
+        return SparsityInfo(self.sparsity_info_list[batch_i:batch_j], self.dims, self.tile_size)

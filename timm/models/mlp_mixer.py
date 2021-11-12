@@ -42,6 +42,9 @@ import math
 from copy import deepcopy
 from functools import partial
 
+# mod by Zhifan Ye
+from sparsity_util import write_sparsity_info
+
 import torch
 import torch.nn as nn
 
@@ -50,8 +53,7 @@ from .helpers import build_model_with_cfg, overlay_external_default_cfg, named_a
 from .layers import PatchEmbed, Mlp, GluMlp, GatedMlp, DropPath, lecun_normal_, to_2tuple
 from .registry import register_model
 
-# mod by Zhifan Ye
-from sparsity_util import write_sparsity_info
+# mod by Zhifan Ye, set True to generate the output
 stats_gen = True
 
 def _cfg(url='', **kwargs):
@@ -145,7 +147,8 @@ class MixerBlock(nn.Module):
     """
     def __init__(
             self, dim, seq_len, mlp_ratio=(0.5, 4.0), mlp_layer=Mlp,
-            norm_layer=partial(nn.LayerNorm, eps=1e-6), act_layer=nn.GELU, drop=0., drop_path=0.):
+            norm_layer=partial(nn.LayerNorm, eps=1e-6), act_layer=nn.GELU, drop=0., drop_path=0.,
+            prefix = ''):
         super().__init__()
         tokens_dim, channels_dim = [int(x * dim) for x in to_2tuple(mlp_ratio)]
         self.norm1 = norm_layer(dim)
@@ -153,9 +156,19 @@ class MixerBlock(nn.Module):
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
         self.mlp_channels = mlp_layer(dim, channels_dim, act_layer=act_layer, drop=drop)
+        
+        # mod by Zhifan Ye
+        self.prefix = prefix
 
     def forward(self, x):
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_tokens_input.spi", dims=['channel', 'token'])
         x = x + self.drop_path(self.mlp_tokens(self.norm1(x).transpose(1, 2)).transpose(1, 2))
+
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_channels_input.spi", dims=['channel', 'token'])
         x = x + self.drop_path(self.mlp_channels(self.norm2(x)))
         return x
 
@@ -268,8 +281,8 @@ class MlpMixer(nn.Module):
         self.blocks = nn.Sequential(*[
             block_layer(
                 embed_dim, self.stem.num_patches, mlp_ratio, mlp_layer=mlp_layer, norm_layer=norm_layer,
-                act_layer=act_layer, drop=drop_rate, drop_path=drop_path_rate)
-            for _ in range(num_blocks)])
+                act_layer=act_layer, drop=drop_rate, drop_path=drop_path_rate, prefix='block_' + str(i))
+            for i in range(num_blocks)])
         self.norm = norm_layer(embed_dim)
         self.head = nn.Linear(embed_dim, self.num_classes) if num_classes > 0 else nn.Identity()
 
@@ -399,6 +412,7 @@ def mixer_b16_224(pretrained=False, **kwargs):
     """
     model_args = dict(patch_size=16, num_blocks=12, embed_dim=768, **kwargs)
     model = _create_mixer('mixer_b16_224', pretrained=pretrained, **model_args)
+    print(model)
     return model
 
 

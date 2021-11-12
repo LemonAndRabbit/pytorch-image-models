@@ -4,19 +4,22 @@ import numpy as np
 
 import torch
 
+from .sparsity_info import SparsityInfo
+
 def convert_tensor_to_sparsity_info(input_tensor: torch.Tensor, zero_threshold=1e-5):
     return input_tensor.gt(zero_threshold)
 
-def write_sparsity_info(input_tensor: torch.Tensor, file_name: str, zero_threshold=1e-5, dims=['channel', 'width', 'height']):
+def write_sparsity_info(input_tensor: torch.Tensor, file_name: str, zero_threshold=1e-5, dims=['channel', 'height', 'width']):
     assert input_tensor.dim()-1 == len(dims), "dims=%d not equal to input_tensor dim=%d" % (len(dims), input_tensor.dim()-1)
 
     for tensor in input_tensor:
-        sparsity_tensor = convert_tensor_to_sparsity_info(tensor, zero_threshold).cpu().numpy()
+        sparsity_tensor = np.packbits(convert_tensor_to_sparsity_info(tensor, zero_threshold).cpu().numpy())
 
         #check if res_conv.csv exists and if not create it
         if not os.path.exists(file_name):
             with open(file_name, 'wb') as f:
                 pickle.dump(dims, f)
+                pickle.dump(input_tensor.shape[1:], f)
         with open(file_name, "ab") as f:
             pickle.dump(sparsity_tensor, f)
 
@@ -25,15 +28,16 @@ def read_sparsity_info(file_name: str):
     sparsity_info_list = []
 
     with open(file_name, 'rb') as f:
-        
+        dims = pickle.load(f)
+        shape = pickle.load(f)
         while True:
             try:
-                temp = pickle.load(f)
+                temp = np.unpackbits(pickle.load(f)).reshape(shape)
                 sparsity_info_list.append(temp)
             except EOFError:
                 break
     
-    return sparsity_info_list
+    return SparsityInfo(sparsity_info_list, dims)
 
 '''
 def sparsity_analyzer(weight_tensor, zero_threshold=1e-5, dim=1):
