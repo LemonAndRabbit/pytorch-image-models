@@ -7,7 +7,7 @@ import torch
 from .sparsity_info import SparsityInfo
 
 def convert_tensor_to_sparsity_info(input_tensor: torch.Tensor, zero_threshold=1e-5):
-    return torch.abs(input_tensor).gt(zero_threshold)
+    return torch.abs(input_tensor).lt(zero_threshold)
 
 def write_sparsity_info(input_tensor: torch.Tensor, file_name: str, zero_threshold=1e-5, dims=['channel', 'height', 'width']):
     assert input_tensor.dim()-1 == len(dims), "dims=%d not equal to input_tensor dim=%d" % (len(dims), input_tensor.dim()-1)
