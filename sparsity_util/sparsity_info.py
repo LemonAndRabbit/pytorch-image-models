@@ -64,7 +64,14 @@ class SparsityInfo:
             for tensor in self.sparsity_info_list:
                 output_tensor_list.append(tile_3D(tensor, tile_size))
 
-        return SparsityInfo(output_tensor_list, self.dims, tile_size)           
+        return SparsityInfo(output_tensor_list, self.dims, tile_size)
+
+    def group_by(self, dim: str):
+        assert dim in self.dims, "dim=%s a correct dim name" % dim
+        out_shape = list(deepcopy(self.shape))
+        out_shape[self.dims.index(dim)] = 1
+        return self.tile(out_shape)
+
 
     def slice_batch(self, batch_i, batch_j):
         '''create a slice in batch dimension'''

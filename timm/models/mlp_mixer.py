@@ -151,25 +151,41 @@ class MixerBlock(nn.Module):
             prefix = ''):
         super().__init__()
         tokens_dim, channels_dim = [int(x * dim) for x in to_2tuple(mlp_ratio)]
-        self.norm1 = norm_layer(dim)
-        self.mlp_tokens = mlp_layer(seq_len, tokens_dim, act_layer=act_layer, drop=drop)
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.norm2 = norm_layer(dim)
-        self.mlp_channels = mlp_layer(dim, channels_dim, act_layer=act_layer, drop=drop)
-        
+
         # mod by Zhifan Ye
         self.prefix = prefix
+
+        self.norm1 = norm_layer(dim)
+        self.mlp_tokens = mlp_layer(seq_len, tokens_dim, act_layer=act_layer, drop=drop, 
+                                        prefix=self.prefix+'_tokens_input', dims=['channel', 'token'])
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.norm2 = norm_layer(dim)
+        self.mlp_channels = mlp_layer(dim, channels_dim, act_layer=act_layer, drop=drop,
+                                        prefix=self.prefix+'_channels_input', dims=['token', 'channel'])
+        
 
     def forward(self, x):
         # mod by Zhifan Ye
         if stats_gen:
             write_sparsity_info(x, self.prefix+"_tokens_input.spi", dims=['channel', 'token'])
-        x = x + self.drop_path(self.mlp_tokens(self.norm1(x).transpose(1, 2)).transpose(1, 2))
+
+        y = self.norm1(x)
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(y, self.prefix+"_tokens_input_norm.spi", dims=['channel', 'token'])        
+
+        x = x + self.drop_path(self.mlp_tokens(y.transpose(1, 2)).transpose(1, 2))
 
         # mod by Zhifan Ye
         if stats_gen:
             write_sparsity_info(x, self.prefix+"_channels_input.spi", dims=['channel', 'token'])
-        x = x + self.drop_path(self.mlp_channels(self.norm2(x)))
+
+        z=self.norm2(x)
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(z, self.prefix+"_channels_input_norm.spi", dims=['channel', 'token'])        
+
+        x = x + self.drop_path(self.mlp_channels(z))
         return x
 
 

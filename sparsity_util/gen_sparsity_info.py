@@ -1,4 +1,5 @@
 import os
+from functools import reduce
 import _pickle as pickle
 import numpy as np
 
@@ -6,10 +7,10 @@ import torch
 
 from .sparsity_info import SparsityInfo
 
-def convert_tensor_to_sparsity_info(input_tensor: torch.Tensor, zero_threshold=1e-5):
+def convert_tensor_to_sparsity_info(input_tensor: torch.Tensor, zero_threshold=1e-3):
     return torch.abs(input_tensor).lt(zero_threshold)
 
-def write_sparsity_info(input_tensor: torch.Tensor, file_name: str, zero_threshold=1e-5, dims=['channel', 'height', 'width']):
+def write_sparsity_info(input_tensor: torch.Tensor, file_name: str, zero_threshold=1e-3, dims=['channel', 'height', 'width']):
     assert input_tensor.dim()-1 == len(dims), "dims=%d not equal to input_tensor dim=%d" % (len(dims), input_tensor.dim()-1)
 
     for tensor in input_tensor:
@@ -32,7 +33,7 @@ def read_sparsity_info(file_name: str):
         shape = pickle.load(f)
         while True:
             try:
-                temp = np.unpackbits(pickle.load(f)).reshape(shape)
+                temp = np.unpackbits(pickle.load(f), count=reduce(lambda x,y: x*y, shape)).reshape(shape)
                 sparsity_info_list.append(temp)
             except EOFError:
                 break

@@ -333,7 +333,9 @@ class BasicBlock(nn.Module):
         # mod by Zhifan Ye
         if stats_gen:
             write_sparsity_info(x, self.prefix+"_input0")
-            
+
+        x = torch.ones_like(x)
+
         x = self.conv1(x)
         x = self.bn1(x)
 

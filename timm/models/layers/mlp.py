@@ -5,16 +5,25 @@ Hacked together by / Copyright 2020 Ross Wightman
 from torch import nn as nn
 
 from .helpers import to_2tuple
+# mod by Zhifan Ye
+from sparsity_util import write_sparsity_info
+# mod by Zhifan Ye, set True to generate the output
+stats_gen = True
 
 
 class Mlp(nn.Module):
     """ MLP as used in Vision Transformer, MLP-Mixer and related networks
     """
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.
+                    , prefix='', dims=[]):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
         drop_probs = to_2tuple(drop)
+
+        # mod by Zhifan Ye
+        self.prefix=prefix
+        self.dims = dims
 
         self.fc1 = nn.Linear(in_features, hidden_features)
         self.act = act_layer()
@@ -24,9 +33,24 @@ class Mlp(nn.Module):
 
     def forward(self, x):
         x = self.fc1(x)
+
+        # mod by Zhifan Ye
+        if stats_gen and self.prefix!='':
+            write_sparsity_info(x, self.prefix+"_fc1.spi", dims=self.dims)
+
         x = self.act(x)
+
+        # mod by Zhifan Ye
+        if stats_gen and self.prefix!='':
+            write_sparsity_info(x, self.prefix+"_gelu.spi", dims=self.dims)
+
         x = self.drop1(x)
         x = self.fc2(x)
+
+        # mod by Zhifan Ye
+        if stats_gen and self.prefix!='':
+            write_sparsity_info(x, self.prefix+"_fc2.spi", dims=self.dims)
+
         x = self.drop2(x)
         return x
 

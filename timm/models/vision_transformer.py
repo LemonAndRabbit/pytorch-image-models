@@ -228,7 +228,17 @@ class Attention(nn.Module):
         attn = self.attn_drop(attn)
 
         x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(attn, self.prefix+"_sft_qkv", dims=['heads', 'patch', 'embdding'])
+
         x = self.proj(x)
+
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(attn, self.prefix+"_qkv_proj", dims=['heads', 'patch', 'embdding'])
+        
         x = self.proj_drop(x)
         return x
 
@@ -252,8 +262,22 @@ class Block(nn.Module):
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
     def forward(self, x):
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_block_input", dims=['patch', 'embdding'])
+
         x = x + self.drop_path(self.attn(self.norm1(x)))
+
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_block_mid", dims=['patch', 'embdding'])
+
         x = x + self.drop_path(self.mlp(self.norm2(x)))
+
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_block_out", dims=['patch', 'embdding'])
+
         return x
 
 

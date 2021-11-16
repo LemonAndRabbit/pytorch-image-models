@@ -168,11 +168,20 @@ class LinearNorm(nn.Sequential):
         return m
 
     def forward(self, x):
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+'input.spi', dims=['patch', 'embedding'])
+
         x = self.c(x)
         # mod by Zhifan Ye
         if stats_gen:
-            write_sparsity_info(x, self.prefix+'_l_output.spi', dims=['patch', 'embedding'])
-        return self.bn(x.flatten(0, 1)).reshape_as(x)
+            write_sparsity_info(x, self.prefix+'output.spi', dims=['patch', 'embedding'])
+        x = self.bn(x.flatten(0, 1)).reshape_as(x)
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+'norm_output.spi', dims=['patch', 'embedding'])
+
+        return x
 
 
 class NormLinear(nn.Sequential):
@@ -306,7 +315,7 @@ class Attention(nn.Module):
 
             # mod by Zhifan Ye
             if stats_gen:
-                write_sparsity_info(x, self.prefix+"_input0", dims=['patch', 'embdding'])
+                write_sparsity_info(x, self.prefix+"input0", dims=['patch', 'embdding'])
 
             qkv = self.qkv(x)
             q, k, v = qkv.view(B, N, self.num_heads, -1).split([self.key_dim, self.key_dim, self.d], dim=3)
@@ -316,25 +325,35 @@ class Attention(nn.Module):
 
             # mod by Zhifan Ye
             if stats_gen:
-                write_sparsity_info(q, self.prefix+"_q", dims=['heads', 'patch', 'embdding'])
-                write_sparsity_info(k, self.prefix+"_k", dims=['heads', 'patch', 'embdding'])
-                write_sparsity_info(v, self.prefix+"_v", dims=['heads', 'patch', 'embdding'])
+                write_sparsity_info(q, self.prefix+"q", dims=['heads', 'patch', 'embdding'])
+                write_sparsity_info(k, self.prefix+"k", dims=['heads', 'patch', 'embdding'])
+                write_sparsity_info(v, self.prefix+"v", dims=['heads', 'patch', 'embdding'])
 
 
             attn = q @ k.transpose(-2, -1) * self.scale + self.get_attention_biases(x.device)
             
             # mod by Zhifan Ye
             if stats_gen:
-                write_sparsity_info(attn, self.prefix+"_qk", dims=['heads', 'patch1', 'patch2'])
+                write_sparsity_info(attn, self.prefix+"qk", dims=['heads', 'patch1', 'patch2'])
 
             attn = attn.softmax(dim=-1)
 
             # mod by Zhifan Ye
             if stats_gen:
-                write_sparsity_info(attn, self.prefix+"_sft_qk", dims=['heads', 'patch1', 'patch2'])
+                write_sparsity_info(attn, self.prefix+"sft_qk", dims=['heads', 'patch1', 'patch2'])
 
             x = (attn @ v).transpose(1, 2).reshape(B, N, self.dh)
+
+            # mod by Zhifan Ye
+            if stats_gen:
+                write_sparsity_info(attn, self.prefix+"qkv", dims=['heads', 'patch1', 'patch2'])
+
         x = self.proj(x)
+
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(attn, self.prefix+"proj_qkv", dims=['heads', 'patch1', 'patch2'])
+
         return x
 
 
@@ -424,7 +443,7 @@ class AttentionSubsample(nn.Module):
 
             # mod by Zhifan Ye
             if stats_gen:
-                write_sparsity_info(x, self.prefix+"_input0", dims=['patch', 'embdding'])
+                write_sparsity_info(x, self.prefix+"input0", dims=['patch', 'embdding'])
 
             k, v = self.kv(x).view(B, N, self.num_heads, -1).split([self.key_dim, self.d], dim=3)
             k = k.permute(0, 2, 1, 3)  # BHNC
@@ -433,24 +452,35 @@ class AttentionSubsample(nn.Module):
 
             # mod by Zhifan Ye
             if stats_gen:
-                write_sparsity_info(q, self.prefix+"_q", dims=['heads', 'patch', 'embdding'])
-                write_sparsity_info(k, self.prefix+"_k", dims=['heads', 'patch', 'embdding'])
-                write_sparsity_info(v, self.prefix+"_v", dims=['heads', 'patch', 'embdding'])
+                write_sparsity_info(q, self.prefix+"q", dims=['heads', 'patch', 'embdding'])
+                write_sparsity_info(k, self.prefix+"k", dims=['heads', 'patch', 'embdding'])
+                write_sparsity_info(v, self.prefix+"v", dims=['heads', 'patch', 'embdding'])
 
             attn = q @ k.transpose(-2, -1) * self.scale + self.get_attention_biases(x.device)
 
             # mod by Zhifan Ye
             if stats_gen:
-                write_sparsity_info(attn, self.prefix+"_qk", dims=['heads', 'patch1', 'patch2'])
+                write_sparsity_info(attn, self.prefix+"qk", dims=['heads', 'patch1', 'patch2'])
 
             attn = attn.softmax(dim=-1)
 
             # mod by Zhifan Ye
             if stats_gen:
-                write_sparsity_info(attn, self.prefix+"_sft_qk", dims=['heads', 'patch1', 'patch2'])
+                write_sparsity_info(attn, self.prefix+"sft_qk", dims=['heads', 'patch1', 'patch2'])
 
             x = (attn @ v).transpose(1, 2).reshape(B, -1, self.dh)
+
+            # mod by Zhifan Ye
+            if stats_gen:
+                write_sparsity_info(attn, self.prefix+"sft_qkv", dims=['heads', 'patch1', 'patch2'])
+
         x = self.proj(x)
+
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(attn, self.prefix+"proj_qkv", dims=['heads', 'patch1', 'patch2'])
+
+
         return x
 
 
@@ -519,17 +549,17 @@ class Levit(nn.Module):
                         Attention(
                             ed, kd, nh, attn_ratio=ar, act_layer=attn_act_layer,
                             resolution=resolution, use_conv=use_conv,
-                            prefix='block_'+str(i)+'attn_'+str(j)+'_'),
+                            prefix='block_'+str(i)+'_attn_'+str(j)+'_'),
                         drop_path_rate))
                 if mr > 0:
                     h = int(ed * mr)
                     self.blocks.append(
                         Residual(nn.Sequential(
                             ln_layer(ed, h, resolution=resolution,
-                                prefix='block_'+str(i)+'l1'+str(j)+'_'),
+                                prefix='block_'+str(i)+'_l1_'+str(j)+'_'),
                             act_layer(),
                             ln_layer(h, ed, bn_weight_init=0, resolution=resolution,
-                                prefix='block_'+str(i)+'l2'+str(j)+'_'),
+                                prefix='block_'+str(i)+'_l2_'+str(j)+'_'),
                         ), drop_path_rate))
             if do[0] == 'Subsample':
                 # ('Subsample',key_dim, num_heads, attn_ratio, mlp_ratio, stride)
@@ -539,17 +569,17 @@ class Levit(nn.Module):
                         *embed_dim[i:i + 2], key_dim=do[1], num_heads=do[2],
                         attn_ratio=do[3], act_layer=attn_act_layer, stride=do[5],
                         resolution=resolution, resolution_=resolution_, use_conv=use_conv,
-                        prefix='subsample_attn_'+str(i)+'_'))
+                        prefix='block_'+str(i)+'_subsample_attn_'))
                 resolution = resolution_
                 if do[4] > 0:  # mlp_ratio
                     h = int(embed_dim[i + 1] * do[4])
                     self.blocks.append(
                         Residual(nn.Sequential(
                             ln_layer(embed_dim[i + 1], h, resolution=resolution,
-                                prefix='subsample_l1_'+str(i)+'_'),
+                                prefix='block_'+str(i)+'_subsample_l1_'),
                             act_layer(),
                             ln_layer(h, embed_dim[i + 1], bn_weight_init=0, resolution=resolution,
-                                prefix='subsample_l2_'+str(i)+'_'),
+                                prefix='block_'+str(i)+'_subsample_l2_'),
                         ), drop_path_rate))
         self.blocks = nn.Sequential(*self.blocks)
 
