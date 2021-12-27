@@ -40,6 +40,19 @@ def read_sparsity_info(file_name: str):
     
     return SparsityInfo(sparsity_info_list, dims)
 
+class ReportSparsityLayer(torch.nn.Module):
+    def __init__(self, file_name: str, zero_threshold=1e-3, dims=['channel', 'height', 'width'], stats_gen=False):
+        super(ReportSparsityLayer, self).__init__()
+        self.file_name = file_name
+        self.zero_threshold = zero_threshold
+        self.dims = dims
+        self.stats_gen = stats_gen
+    
+    def forward(self, x):
+        if self.stats_gen:
+            write_sparsity_info(x, self.file_name, self.zero_threshold, self.dims)
+        return x
+
 '''
 def sparsity_analyzer(weight_tensor, zero_threshold=1e-5, dim=1):
     weight_tensor = torch.clone(weight_tensor)
