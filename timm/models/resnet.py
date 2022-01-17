@@ -9,9 +9,6 @@ Copyright 2020 Ross Wightman
 import math
 from functools import partial
 
-# mod by Zhifan Ye
-from sparsity_util import write_sparsity_info
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -23,8 +20,12 @@ from .registry import register_model
 
 __all__ = ['ResNet', 'BasicBlock', 'Bottleneck']  # model_registry will add each entrypoint fn to this
 
+# mod by Zhifan Ye
+from sparsity_util import write_sparsity_info
+torch.fx.wrap('write_sparsity_info')
+
 # mod by Zhifan Ye, set True to generate the output
-stats_gen = True
+stats_gen = False
 
 def _cfg(url='', **kwargs):
     return {
@@ -334,8 +335,6 @@ class BasicBlock(nn.Module):
         if stats_gen:
             write_sparsity_info(x, self.prefix+"_input0")
 
-        x = torch.ones_like(x)
-
         x = self.conv1(x)
         x = self.bn1(x)
 
@@ -380,9 +379,13 @@ class BasicBlock(nn.Module):
             shortcut = self.downsample(shortcut)
             # mod by Zhifan Ye
             if stats_gen:
-                write_sparsity_info(x, self.prefix+"_ds8")
+                write_sparsity_info(x, self.prefix+"_ds7")
 
         x += shortcut
+        # mod by Zhifan Ye
+        if stats_gen:
+            write_sparsity_info(x, self.prefix+"_residual8")
+
         x = self.act2(x)
         # mod by Zhifan Ye
         if stats_gen:
@@ -539,7 +542,7 @@ def make_blocks(
             block_dpr = drop_path_rate * net_block_idx / (net_num_blocks - 1)  # stochastic depth linear decay rule
             blocks.append(block_fn(
                 inplanes, planes, stride, downsample, first_dilation=prev_dilation,
-                prefix = stage_name + '_b' + str(block_idx),
+                prefix = stage_name + '_b' + str(block_idx) + '_',
                 drop_path=DropPath(block_dpr) if block_dpr > 0. else None, **block_kwargs))
             prev_dilation = dilation
             inplanes = planes * block_fn.expansion
@@ -708,7 +711,11 @@ class ResNet(nn.Module):
     def forward_features(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
+        if stats_gen:
+            write_sparsity_info(x, 'stem_conv_bn')
         x = self.act1(x)
+        if stats_gen:
+            write_sparsity_info(x, 'stem_bn_act')
         x = self.maxpool(x)
 
         x = self.layer1(x)
