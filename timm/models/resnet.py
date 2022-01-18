@@ -25,7 +25,7 @@ from sparsity_util import write_sparsity_info
 torch.fx.wrap('write_sparsity_info')
 
 # mod by Zhifan Ye, set True to generate the output
-stats_gen = False
+stats_gen = True
 
 def _cfg(url='', **kwargs):
     return {
