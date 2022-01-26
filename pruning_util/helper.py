@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 import torch.nn.utils.prune as prune
 import copy
 
@@ -30,4 +31,25 @@ def prune_solidator(model: torch.nn.Module):
         if isinstance(module, torch.nn.Linear):
             prune.remove(module, name='weight')
     
-    
+def prune_protector(model: torch.nn.Module):
+    def get_protector_hook(weight_mask):
+        def protector_hook(m, input):
+            m.weight = nn.parameter.Parameter(m.weight*weight_mask)
+
+        return protector_hook
+
+    for name, module in model.named_modules():
+        if isinstance(module, torch.nn.Conv2d):
+            for k, hook in module._forward_pre_hooks.items():
+                if hook.__name__ == 'protector_hook':
+                    del module._forward_pre_hooks[k]
+            print('protected pruning: ' + name)
+            module.register_forward_pre_hook(get_protector_hook(module.weight_mask))
+
+def remove_prune_protector(model: torch.nn.Module):
+    for name, module in model.named_modules():
+        if isinstance(module, torch.nn.Conv2d):
+            for k, hook in module._forward_pre_hooks.items():
+                if hook.__name__ == 'protector_hook':
+                    hook(module, 0)
+                    del module._forward_pre_hooks[k]
